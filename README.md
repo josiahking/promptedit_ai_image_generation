@@ -51,7 +51,10 @@ In separate terminals:
 ```bash
 npm run dev
 php artisan queue:work
+php artisan schedule:work
 ```
+
+Configure the webhook URL for the relevant Pixelforge API key as `https://YOUR_APP_DOMAIN/webhooks/pixelforge`. The endpoint must be publicly reachable; local development requires a secure tunnel. The queue worker processes received events, and the scheduler executes `pixelforge:reconcile` every minute to recover stale generations and unprocessed events.
 
 ## Architecture
 
@@ -67,6 +70,10 @@ The application follows Laravel conventions with a small service layer. Controll
 | `app/Jobs/SubmitPixelforgeGeneration.php` | Execute queued provider requests with bounded retries |
 | `app/Actions/RecordPixelforgeAcknowledgement.php` | Attach provider identity and rates without regressing generation state |
 | `app/Models/Generation.php` | Generation state, costs, usage, and provider metadata |
+| `app/Http/Controllers/PixelforgeWebhookController.php` | Verify raw-body HMAC signature and persist event receipt |
+| `app/Jobs/ProcessPixelforgeWebhook.php` | Deduplicate processing and lock generation updates |
+| `app/Actions/ApplyPixelforgeGeneration.php` | Shared webhook/polling transition and exact final billing policy |
+| `app/Console/Commands/ReconcilePixelforgeGenerations.php` | Retry unprocessed events and poll stale provider states |
 
 ### Technical decisions and trade-offs
 
@@ -78,7 +85,7 @@ The application follows Laravel conventions with a small service layer. Controll
 
 **Failure semantics.** Validation and policy rejections are distinct from provider failures. Rate limits and overloads use bounded retries and `Retry-After` where available. If the outcome of a submission cannot be determined, its state remains `submission_unknown` rather than being treated as a confirmed failure.
 
-**State safety.** The acknowledgement handler uses a database transaction and row lock. An acknowledgement cannot overwrite an already terminal generation or replace an established provider ID.
+**State safety.** Webhooks are verified with HMAC-SHA256 over the timestamp and raw body, with a five-minute timestamp tolerance. A unique provider event ID makes receipt idempotent. The event is persisted before a quick 2xx response; queued processing uses transactions and row locks to prevent duplicate finalization or terminal-state regression. The same pricing and transition service handles polling recovery if webhook delivery fails. This requires a queue worker and scheduler, but avoids doing slow work inside webhook delivery.
 
 Eloquent is used directly for persistence. A generic repository abstraction is intentionally avoided because it would add indirection without improving these workflows.
 
@@ -89,7 +96,7 @@ php artisan test
 composer ci:check
 ```
 
-The CI checks include PHP formatting, static analysis, frontend checks, and PHPUnit. Integration tests use Laravel's HTTP fakes to exercise the provider contract, idempotency, timeouts, overloads, acknowledgement races, and persisted generation state. SQLite in-memory is used for automated tests; PostgreSQL is the target database for deployment.
+The CI checks include PHP formatting, static analysis, frontend checks, and PHPUnit. Integration tests use Laravel's HTTP fakes to exercise the provider contract, idempotency, timeouts, overloads, acknowledgement races, raw webhook signatures, duplicate and out-of-order events, exact final charges, polling recovery, and persisted generation state. SQLite in-memory is used for automated tests; PostgreSQL is the target database for deployment.
 
 ## API documentation
 
