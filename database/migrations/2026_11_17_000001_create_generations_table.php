@@ -18,7 +18,7 @@ return new class extends Migration
             $table->string('size', 12);
             $table->string('quality', 10);
             $table->json('reference_images');
-            $table->string('status', 16)->default('submitting')->index();
+            $table->string('status', 24)->default('submitting')->index();
             $table->decimal('estimated_customer_usd', 24, 12);
             $table->decimal('minimum_customer_usd', 24, 12);
             $table->decimal('maximum_customer_usd', 24, 12);

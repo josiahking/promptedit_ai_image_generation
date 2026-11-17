@@ -42,8 +42,10 @@ final class RecordPixelforgeAcknowledgement
                 $local->status = $providerStatus === 'processing' ? 'processing' : 'queued';
             }
 
-            $local->error_code = null;
-            $local->error_message = null;
+            if (! $local->isTerminal()) {
+                $local->error_code = null;
+                $local->error_message = null;
+            }
 
             $local->provider_created_at ??= $providerGeneration['created_at'] ?? null;
             $local->save();
