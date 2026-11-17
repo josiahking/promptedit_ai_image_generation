@@ -2,7 +2,7 @@
 
 Senior Product Engineer take-home assessment, built on the official Laravel 13 Vue/Inertia starter kit.
 
-**Status:** Laravel/Vue starter and pricing/persistence foundation committed. Provider HTTP integration, webhooks, generation UI and public deployment are not yet complete. Do not submit this assessment until the required flows work.
+**Status:** Laravel/Vue foundation and WP2 provider submission are implemented and CI-verified. Signed webhooks, polling recovery, generation UI, and public deployment are not yet complete. Do not submit this assessment until the required flows work.
 
 ## Stack
 
@@ -22,16 +22,20 @@ Set PIXELFORGE_API_KEY and PIXELFORGE_WEBHOOK_SECRET only in .env or hosting sec
 ## Architecture
 
 - Thin HTTP controllers and cohesive app/Actions.
-- Pixelforge adapter (next work package), separate from billing.
+- PixelforgeClient adapter handles authenticated HTTP, pricing, idempotent creation, and classified provider errors independently of billing.
 - Money Value Object uses integer picodollars (12 decimal places); no PHP float arithmetic.
 - PricingService computes provider charges from returned per-generation usage and creation-time rates; customer markup is 25%.
-- PersistGeneration creates local ownership, ID and stable idempotency key before any external POST.
+- PersistGeneration creates local ownership, ID and stable idempotency key before any external POST. SubmitGeneration schedules a queued job; RecordPixelforgeAcknowledgement cannot reverse terminal state.
 - Migrations provide generation records and a deduplicated webhook-event inbox.
+
+## CI verification
+
+WP2 passed GitHub Actions on commit 6069cd5fe572bb522b690d236ef8679d893d4834: 55 PHPUnit tests (182 assertions), PHPStan, formatting, Vue typecheck and frontend build. CI uses in-memory SQLite, not production PostgreSQL. No live Pixelforge calls have been made.
 
 ## Work packages
 
-WP1: starter, exact pricing and local persistence (committed; runtime validation pending).
-WP2: submit through Pixelforge with idempotency and bounded retries (pending).
+WP1: starter, exact pricing and local persistence (CI verified).
+WP2: Pixelforge HTTP adapter, queued submission, idempotent retry, rate limit handling and acknowledgement race guards (CI verified, live API pending).
 WP3: HMAC-signed webhooks, event deduplication, terminal state transitions and polling recovery (pending).
 WP4: Vue/Inertia generation form, history, images and estimates (pending).
 WP5: tested public deployment, usage reconciliation and application submission (pending).
