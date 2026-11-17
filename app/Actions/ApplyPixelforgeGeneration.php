@@ -31,7 +31,7 @@ final readonly class ApplyPixelforgeGeneration
             throw new UnexpectedValueException('Provider snapshot does not match the saved generation.');
         }
 
-        $existingRates = $generation->rates_snapshot;
+        $existingRates = $generation->getAttribute('rates_snapshot');
         if (is_array($existingRates)) {
             foreach (['input_text_tokens', 'input_image_tokens', 'output_tokens', 'reasoning_tokens'] as $category) {
                 if (($rates[$category] ?? null) !== ($existingRates[$category] ?? null)) {
@@ -76,8 +76,8 @@ final readonly class ApplyPixelforgeGeneration
             }
 
             $generation->status = 'failed';
-            $generation->provider_cost_usd = '0.000000000000';
-            $generation->customer_cost_usd = '0.000000000000';
+            $generation->setAttribute('provider_cost_usd', '0.000000000000');
+            $generation->setAttribute('customer_cost_usd', '0.000000000000');
             $generation->error_code = $error['code'];
             $generation->error_message = is_string($error['message'] ?? null) ? $error['message'] : null;
             $generation->save();
@@ -96,8 +96,8 @@ final readonly class ApplyPixelforgeGeneration
 
         $generation->status = 'succeeded';
         $generation->setAttribute('usage', $usage);
-        $generation->provider_cost_usd = $cost->toDecimal();
-        $generation->customer_cost_usd = $cost->withMarkup()->toDecimal();
+        $generation->setAttribute('provider_cost_usd', $cost->toDecimal());
+        $generation->setAttribute('customer_cost_usd', $cost->withMarkup()->toDecimal());
         $generation->image_url = $image;
         $generation->image_url_expires_at = $snapshot['image_url_expires_at'] ?? null;
         $generation->error_code = null;

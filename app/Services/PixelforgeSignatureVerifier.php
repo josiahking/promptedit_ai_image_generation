@@ -29,7 +29,7 @@ final class PixelforgeSignatureVerifier
 
         if (! preg_match('/^[0-9]{10,12}$/D', $timestamp)
             || ! preg_match('/^[0-9a-f]{64}$/D', $signature)
-            || abs(now()->timestamp - (int) $timestamp) > 300) {
+            || abs((int) now()->timestamp - (int) $timestamp) > 300) {
             return false;
         }
 

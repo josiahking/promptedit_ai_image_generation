@@ -30,13 +30,14 @@ final class ProcessPixelforgeWebhook implements ShouldQueue
             }
 
             if ($event->type === 'ping') {
-                $event->processed_at = now();
+                $event->setAttribute('processed_at', now());
                 $event->save();
 
                 return;
             }
 
-            $snapshot = $event->payload['data']['object'] ?? null;
+            $payload = $event->getAttribute('payload');
+            $snapshot = is_array($payload) ? ($payload['data']['object'] ?? null) : null;
 
             if (! is_array($snapshot) || ! is_string($event->generation_id)) {
                 throw new UnexpectedValueException('The stored event has no matching generation data.');
@@ -54,6 +55,7 @@ final class ProcessPixelforgeWebhook implements ShouldQueue
     }
 
     /** Backoff for transient missing local records or database contention. */
+    /** @return list<int> */
     public function backoff(): array
     {
         return [10, 30, 60, 120];
