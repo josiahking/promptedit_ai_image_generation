@@ -56,6 +56,24 @@ php artisan schedule:work
 
 Configure the webhook URL for the relevant Pixelforge API key as `https://YOUR_APP_DOMAIN/webhooks/pixelforge`. The endpoint must be publicly reachable; local development requires a secure tunnel. The queue worker processes received events, and the scheduler executes `pixelforge:reconcile` every minute to recover stale generations and unprocessed events.
 
+### Docker / Laravel Sail
+
+For a reproducible local PostgreSQL environment, use Laravel Sail rather than installing a separate PostgreSQL server:
+
+```bash
+cp .env.example .env
+# Set DB_CONNECTION=pgsql, DB_HOST=pgsql, DB_DATABASE=promptedit,
+# DB_USERNAME=sail and DB_PASSWORD=password in .env.
+composer install
+./vendor/bin/sail up -d --build
+./vendor/bin/sail artisan key:generate
+./vendor/bin/sail artisan migrate --force
+./vendor/bin/sail npm install
+./vendor/bin/sail npm run build
+```
+
+Sail starts the app, PostgreSQL, a queue worker, and a scheduler. See [local development and testing](docs/LOCAL-DEVELOPMENT.md) for complete setup, Vite, PostgreSQL tests, and live webhook testing.
+
 ## Architecture
 
 The application follows Laravel conventions with a small service layer. Controllers own HTTP concerns; application actions coordinate workflows; the Pixelforge client isolates provider-specific requests and responses.
@@ -74,6 +92,8 @@ The application follows Laravel conventions with a small service layer. Controll
 | `app/Jobs/ProcessPixelforgeWebhook.php` | Deduplicate processing and lock generation updates |
 | `app/Actions/ApplyPixelforgeGeneration.php` | Shared webhook/polling transition and exact final billing policy |
 | `app/Console/Commands/ReconcilePixelforgeGenerations.php` | Retry unprocessed events and poll stale provider states |
+| `app/Services/UsageReconciliationService.php` | Reconcile provider usage and exact charges by UTC completion day |
+| `app/Console/Commands/ReconcilePixelforgeUsage.php` | CLI date-range validation and discrepancy reporting |
 
 ### Technical decisions and trade-offs
 
@@ -87,6 +107,8 @@ The application follows Laravel conventions with a small service layer. Controll
 
 **State safety.** Webhooks are verified with HMAC-SHA256 over the timestamp and raw body, with a five-minute timestamp tolerance. A unique provider event ID makes receipt idempotent. The event is persisted before a quick 2xx response; queued processing uses transactions and row locks to prevent duplicate finalization or terminal-state regression. The same pricing and transition service handles polling recovery if webhook delivery fails. This requires a queue worker and scheduler, but avoids doing slow work inside webhook delivery.
 
+**Reconciliation.** `php artisan pixelforge:usage-reconcile --start=YYYY-MM-DD --end=YYYY-MM-DD` compares the provider's per-key UTC daily usage against local succeeded generations. It checks the four token categories, exact provider cost, and locally stored 25% markup. Mismatches make the command fail so reporting differences are not silently ignored.
+
 Eloquent is used directly for persistence. A generic repository abstraction is intentionally avoided because it would add indirection without improving these workflows.
 
 ## Testing and quality checks
@@ -96,7 +118,7 @@ php artisan test
 composer ci:check
 ```
 
-The CI checks include PHP formatting, static analysis, frontend checks, and PHPUnit. Integration tests use Laravel's HTTP fakes to exercise the provider contract, idempotency, timeouts, overloads, acknowledgement races, raw webhook signatures, duplicate and out-of-order events, exact final charges, polling recovery, and persisted generation state. SQLite in-memory is used for automated tests; PostgreSQL is the target database for deployment.
+The CI checks include PHP formatting, static analysis, frontend checks, and PHPUnit. Integration tests use Laravel's HTTP fakes to exercise the provider contract, idempotency, timeouts, overloads, acknowledgement races, raw webhook signatures, duplicate and out-of-order events, exact final charges, polling recovery, and persisted generation state. The CI suite runs on SQLite in memory and PostgreSQL 17; local Sail uses PostgreSQL.
 
 ## API documentation
 
