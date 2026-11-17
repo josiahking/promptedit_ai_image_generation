@@ -107,7 +107,7 @@ final class PixelforgeClient
         ];
 
         $retryAfter = $response->header('Retry-After');
-        $seconds = is_string($retryAfter) && ctype_digit($retryAfter)
+        $seconds = ctype_digit((string) $retryAfter)
             ? min((int) $retryAfter, 3600)
             : null;
 
