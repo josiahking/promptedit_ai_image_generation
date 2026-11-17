@@ -109,6 +109,45 @@ final class PixelforgeClient
         return $data;
     }
 
+    /**
+     * Query exact per-key provider charges for an inclusive UTC date range.
+     *
+     * @return array<string, mixed>
+     */
+    public function usage(string $startDate, string $endDate): array
+    {
+        $key = config('services.pixelforge.key');
+
+        if (! is_string($key) || $key === '') {
+            throw new LogicException('Pixelforge API key is not configured.');
+        }
+
+        $response = Http::acceptJson()
+            ->withToken($key)
+            ->timeout(15)
+            ->get($this->url('usage'), [
+                'start_date' => $startDate,
+                'end_date' => $endDate,
+            ]);
+
+        if (! $response->successful()) {
+            throw $this->apiError($response);
+        }
+
+        $data = $response->json();
+
+        if (! is_array($data)
+            || ($data['object'] ?? null) !== 'usage'
+            || ($data['start_date'] ?? null) !== $startDate
+            || ($data['end_date'] ?? null) !== $endDate
+            || ! is_array($data['data'] ?? null)
+            || ! is_array($data['total'] ?? null)) {
+            throw new UnexpectedValueException('Pixelforge returned an invalid usage report.');
+        }
+
+        return $data;
+    }
+
     private function url(string $path): string
     {
         $base = config('services.pixelforge.base_url');
