@@ -33,7 +33,7 @@ final class RecordPixelforgeAcknowledgement
             $local->provider_generation_id = $providerId;
 
             if ($local->rates_snapshot === null) {
-                $local->rates_snapshot = $rates;
+                $local->setAttribute('rates_snapshot', $rates);
             }
 
             // Webhooks may arrive before the original POST returns.
