@@ -11,7 +11,7 @@ use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Queue;
-use Inertia\Testing\AssertableJson as Assert;
+use Inertia\Testing\AssertableInertia as Assert;
 use Tests\TestCase;
 
 final class GenerationStudioTest extends TestCase
