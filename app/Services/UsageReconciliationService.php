@@ -61,10 +61,6 @@ final readonly class UsageReconciliationService
             ->where('completed_at', '<', $end->addDay())
             ->chunkById(100, function (Collection $generations) use (&$local, &$errors): void {
                 foreach ($generations as $generation) {
-                    if (! $generation instanceof Generation) {
-                        throw new UnexpectedValueException('Unexpected generation record.');
-                    }
-
                     $completed = $generation->getAttribute('completed_at');
                     $usage = $generation->getAttribute('usage');
                     $rates = $generation->getAttribute('rates_snapshot');
@@ -114,7 +110,7 @@ final readonly class UsageReconciliationService
                         $row[$category] += $usage[$category];
                     }
 
-                    $row['cost_usd'] = Money::fromDecimal($row['cost_usd'])
+                    $row['cost_usd'] = Money::fromDecimal((string) $row['cost_usd'])
                         ->add(Money::fromDecimal($providerAmount))->toDecimal();
                     $local[$date] = $row;
                 }
@@ -230,8 +226,8 @@ final readonly class UsageReconciliationService
             $left[$field] += $right[$field];
         }
 
-        $left['cost_usd'] = Money::fromDecimal($left['cost_usd'])
-            ->add(Money::fromDecimal($right['cost_usd']))->toDecimal();
+        $left['cost_usd'] = Money::fromDecimal((string) $left['cost_usd'])
+            ->add(Money::fromDecimal((string) $right['cost_usd']))->toDecimal();
 
         return $left;
     }

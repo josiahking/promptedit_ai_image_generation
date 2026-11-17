@@ -25,12 +25,6 @@ final class ReconcilePixelforgeUsage extends Command
         $from = $this->option('start') ?: $default;
         $to = $this->option('end') ?: $from;
 
-        if (! is_string($from) || ! is_string($to)) {
-            $this->error('Dates must use YYYY-MM-DD.');
-
-            return self::FAILURE;
-        }
-
         $start = $this->parseDay($from);
         $end = $this->parseDay($to);
 
