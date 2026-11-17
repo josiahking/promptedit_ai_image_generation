@@ -5,14 +5,17 @@ declare(strict_types=1);
 namespace App\Services;
 
 use App\Models\Generation;
+use Carbon\CarbonImmutable;
 
 final class GenerationPresenter
 {
     /** @return array<string, mixed> */
     public function toArray(Generation $generation): array
     {
-        $expiresAt = $generation->image_url_expires_at
-            ?? $generation->completed_at?->addDay();
+        $completed = $generation->getAttribute('completed_at');
+        $completedAt = $completed instanceof CarbonImmutable ? $completed : null;
+        $expiration = $generation->getAttribute('image_url_expires_at');
+        $expiresAt = $expiration instanceof CarbonImmutable ? $expiration : $completedAt?->addDay();
 
         $expired = $generation->status === 'succeeded'
             && $expiresAt !== null
@@ -35,7 +38,7 @@ final class GenerationPresenter
             'error_code' => $generation->error_code,
             'error_message' => $generation->error_message,
             'created_at' => $generation->created_at?->toIso8601String(),
-            'completed_at' => $generation->completed_at?->toIso8601String(),
+            'completed_at' => $completedAt?->toIso8601String(),
         ];
     }
 }
