@@ -165,8 +165,6 @@ function refreshHistory(): void {
     refreshInProgress.value = true;
     router.reload({
         only: ['generations'],
-        preserveScroll: true,
-        preserveState: true,
         onFinish: () => { refreshInProgress.value = false; },
     });
 }
