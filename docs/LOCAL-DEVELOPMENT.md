@@ -1,102 +1,109 @@
-# Local testing with Laravel Sail
+# Local development with Laravel Sail
 
-Sail runs Laravel, PostgreSQL, a database queue worker and the reconciliation scheduler without paid hosting. It is a local development environment, not a production deployment.
+Use this setup for local development and testing. Railway is the separate public production deployment; it uses its own PostgreSQL database and environment variables.
 
-## Prerequisites
+## Requirements
 
-Install Docker Desktop (Linux containers / WSL2 on Windows), Git, PHP 8.3+ and Composer 2. Composer is needed once on the host to install the Sail executable; subsequent PHP and Node commands run inside Sail. If Composer is unavailable locally, use a temporary Composer container as shown below.
+- Docker Desktop with Linux containers and WSL2 enabled on Windows
+- Git
+- Composer 2 and PHP 8.3+ **or** a temporary Composer Docker container for bootstrapping
+
+## First-time setup
+
+From Windows Git Bash, WSL or a Linux/macOS terminal:
 
 ```bash
 git clone https://github.com/josiahking/promptedit_ai_image_generation.git
 cd promptedit_ai_image_generation
-cp .env.example .env
-```
-
-Set the following values in `.env` before booting:
-
-```dotenv
-APP_NAME=PromptEdit
-APP_ENV=local
-APP_DEBUG=true
-APP_URL=http://localhost:8000
-APP_PORT=8000
-VITE_PORT=5173
-DB_CONNECTION=pgsql
-DB_HOST=pgsql
-DB_PORT=5432
-DB_DATABASE=promptedit
-DB_USERNAME=sail
-DB_PASSWORD=password
-QUEUE_CONNECTION=database
-SESSION_DRIVER=database
-CACHE_STORE=database
-PIXELFORGE_BASE_URL=https://pixelforge.promptedit.dev/v1
-PIXELFORGE_API_KEY=
-PIXELFORGE_WEBHOOK_SECRET=
-```
-
-Use real Pixelforge keys only in your local `.env`. The webhook signing secret belongs to the exact API key whose webhooks you configure. The placeholder password is **only for local Docker**; never use it on a public database.
-
-Install Composer dependencies with either your host Composer:
-
-```bash
+cp .env.sail.example .env
 composer install
-```
-
-Or, from the repository root, without local Composer:
-
-```bash
-docker run --rm -u "$(id -u):$(id -g)" -v "$PWD:/app" -w /app composer:2 install --no-interaction
-```
-
-On Windows PowerShell, prefer the host Composer method (or use the Composer container from WSL2). Docker must be running.
-
-Start the stack:
-
-```bash
 ./vendor/bin/sail up -d --build
 ./vendor/bin/sail artisan key:generate
 ./vendor/bin/sail artisan migrate --force
 ./vendor/bin/sail npm install
-./vendor/bin/sail npm run build
 ./vendor/bin/sail npm run dev
 ```
 
-The final command runs Vite in the foreground; use another terminal to browse http://localhost:8000. Worker and scheduler are already separate Compose services. Inspect them with `docker compose ps` and `docker compose logs --tail=100 worker scheduler`.
+The final command runs Vite in the foreground. Keep that terminal open and visit **http://localhost:8000**. Worker and scheduler run as separate Docker Compose services.
 
-## Verification
+If Composer is not installed locally, substitute the `composer install` step with the following command in **WSL2/Linux**:
+
+```bash
+docker run --rm --user "$(id -u):$(id -g)" -v "$PWD:/app" -w /app composer:2 install --no-interaction
+```
+
+In **Windows Git Bash**, Docker's Windows path translation can interfere with mounts. Use:
+
+```bash
+MSYS_NO_PATHCONV=1 docker run --rm -v "$(pwd -W):/app" -w /app composer:2 install --no-interaction
+```
+
+If Docker Compose reports port 5432 in use, set `FORWARD_DB_PORT=5433` in `.env`. If 8000 is used, set `APP_PORT=8001` and `APP_URL=http://localhost:8001`. Restart Sail after changing ports.
+
+The `.env.sail.example` file is a safe **local-only template**. Keep `.env`, `PIXELFORGE_API_KEY` and `PIXELFORGE_WEBHOOK_SECRET` out of Git. Use **a different Pixelforge API key per environment**, as each key has its own usage report and webhook secret.
+
+## Daily commands
+
+```bash
+./vendor/bin/sail up -d
+./vendor/bin/sail npm run dev
+```
+
+The local setup includes Laravel/PHP 8.3, PostgreSQL 17, queue worker, scheduler and Vite. Check that all processes are healthy:
+
+```bash
+./vendor/bin/sail ps
+docker compose logs --tail=80 worker scheduler
+./vendor/bin/sail artisan schedule:list
+```
+
+## Testing
 
 ```bash
 ./vendor/bin/sail artisan test
 ./vendor/bin/sail composer ci:check
-./vendor/bin/sail artisan schedule:list
-./vendor/bin/sail artisan pixelforge:reconcile
 ```
 
-To exercise tests against **PostgreSQL** instead of the project's default SQLite PHPUnit configuration:
-
-```bash
-./vendor/bin/sail exec -e DB_CONNECTION=pgsql -e DB_URL= -e DB_HOST=pgsql -e DB_DATABASE=promptedit_test laravel.test php artisan test
-```
-
-Create the `promptedit_test` database first:
+The project's default test configuration uses SQLite. For a separate PostgreSQL test database, first create it:
 
 ```bash
 docker compose exec -T pgsql sh -c 'PGPASSWORD="$POSTGRES_PASSWORD" createdb -U "$POSTGRES_USER" promptedit_test'
 ```
 
-The test database command overrides the testing connection and assumes a separately created `promptedit_test` database; do not point tests at a database holding data you want to keep.
+Then run the suite against **that test database only**:
 
-For provider reconciliation use UTC dates after completing real generations:
+```bash
+./vendor/bin/sail exec -e DB_CONNECTION=pgsql -e DB_URL= -e DB_HOST=pgsql -e DB_DATABASE=promptedit_test laravel.test php artisan test
+```
+
+Never run tests using your development database or Railway production database.
+
+## Testing Pixelforge locally
+
+Add your local key to `.env`, then restart the web and worker services:
+
+```bash
+./vendor/bin/sail restart
+```
+
+Try `[succeed]`, `[fail]`, `[duplicate]`, `[slow]` and `[overloaded]` in prompts to test provider behavior.
+
+Pixelforge cannot deliver webhook events directly to localhost. For real webhooks, expose port 8000 through an HTTPS tunnel and register `https://YOUR-TUNNEL/webhooks/pixelforge` as your **local key's** webhook URL. Use that key's signing secret in `.env`; never reuse the production key or secret. You can verify polling recovery independently with:
+
+```bash
+./vendor/bin/sail artisan pixelforge:reconcile
+```
+
+After completing real generations, reconcile the key's UTC daily usage:
 
 ```bash
 ./vendor/bin/sail artisan pixelforge:usage-reconcile --start=2026-11-17 --end=2026-11-17
 ```
 
-The reconciliation exits nonzero if any provider/local daily totals or stored per-generation charges disagree. It uses the API key in your local `.env`, so ensure those generations were made using that key.
+Replace the dates with actual generation completion days. The command exits nonzero on any discrepancy.
 
-## Live webhook test
+Stop your local containers using `./vendor/bin/sail down`. Do not run `down -v` unless you intend to remove local PostgreSQL data.
 
-A localhost URL is not publicly reachable by Pixelforge. Expose port 8000 through your preferred HTTPS tunnel, register `https://YOUR-TUNNEL/webhooks/pixelforge` in Pixelforge, and copy its signing secret to `PIXELFORGE_WEBHOOK_SECRET`. Restart/reload the app after changing configuration. Use `[succeed]`, `[fail]`, `[duplicate]`, `[slow]` and `[overloaded]` prompts to verify provider behavior. Compare completion-day usage with the command above. Temporary tunnels are for local tests only, not the final submitted public app.
+## Railway production
 
-Stop the environment with `./vendor/bin/sail down`. Avoid `down -v` unless you intend to delete the PostgreSQL volume.
+Railway serves the public app at https://prompteditaiimagegeneration-production.up.railway.app and uses a separate PostgreSQL service, queue worker and scheduler. Never copy the local Compose password into Railway. Push changes to `main` only after checks pass; Railway redeploys from GitHub. Set Pixelforge credentials securely in Railway service variables, not in the repository.

@@ -1,6 +1,6 @@
 # Pixelforge Image Generation
 
-A Laravel, Vue, and Inertia application integrating the [Pixelforge API](https://pixelforge.promptedit.dev/docs) for asynchronous AI image generation.
+An authenticated Laravel, Vue, and Inertia application with a public introduction and private per-user generation studio, integrating the [Pixelforge API](https://pixelforge.promptedit.dev/docs) for asynchronous AI image generation.
 
 ## Technology
 
@@ -58,12 +58,10 @@ Configure the webhook URL for the relevant Pixelforge API key as `https://YOUR_A
 
 ### Docker / Laravel Sail
 
-For a reproducible local PostgreSQL environment, use Laravel Sail rather than installing a separate PostgreSQL server:
+For a reproducible local PostgreSQL environment, use the dedicated local configuration rather than installing PostgreSQL on your host:
 
 ```bash
-cp .env.example .env
-# Set DB_CONNECTION=pgsql, DB_HOST=pgsql, DB_DATABASE=promptedit,
-# DB_USERNAME=sail and DB_PASSWORD=password in .env.
+cp .env.sail.example .env
 composer install
 ./vendor/bin/sail up -d --build
 ./vendor/bin/sail artisan key:generate
@@ -72,7 +70,7 @@ composer install
 ./vendor/bin/sail npm run build
 ```
 
-Sail starts the app, PostgreSQL, a queue worker, and a scheduler. See [local development and testing](docs/LOCAL-DEVELOPMENT.md) for complete setup, Vite, PostgreSQL tests, and live webhook testing.
+Sail starts the app, PostgreSQL, a queue worker, and a scheduler. Keep local credentials separate from the production Railway environment. See [local development and testing](docs/LOCAL-DEVELOPMENT.md) for complete setup, Vite, PostgreSQL tests, and live webhook testing.
 
 ## Architecture
 
