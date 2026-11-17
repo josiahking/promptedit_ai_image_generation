@@ -49,6 +49,9 @@ jobs:
       - name: Setup Application
         run: composer setup
 
+      - name: Validate Laravel Sail Docker Compose configuration
+        run: docker compose --env-file .env.sail.example config --quiet
+
       - name: Run CI Checks
         run: composer ci:check
 
