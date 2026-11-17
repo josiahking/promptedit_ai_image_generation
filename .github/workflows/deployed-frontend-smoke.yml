@@ -1,0 +1,92 @@
+name: Deployed frontend smoke test
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - main
+    paths:
+      - '.github/workflows/deployed-frontend-smoke.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  smoke:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Inspect public HTML and static asset responses
+        env:
+          BASE_URL: https://prompteditaiimagegeneration-production.up.railway.app
+        run: |
+          python3 - <<'PY'
+          import os
+          import re
+          import sys
+          import urllib.error
+          import urllib.parse
+          import urllib.request
+          from html.parser import HTMLParser
+
+          base = os.environ['BASE_URL']
+          class PageParser(HTMLParser):
+              def __init__(self):
+                  super().__init__()
+                  self.assets = []
+                  self.inertia = False
+                  self.inline_scripts = 0
+              def handle_starttag(self, tag, attrs):
+                  d = dict(attrs)
+                  if tag == 'script':
+                      if d.get('src'):
+                          self.assets.append(d['src'])
+                      else:
+                          self.inline_scripts += 1
+                  if tag == 'link' and d.get('rel') in ('stylesheet', 'modulepreload') and d.get('href'):
+                      self.assets.append(d['href'])
+                  if d.get('id') == 'app' or 'data-page' in d:
+                      self.inertia = True
+
+          def fetch(url):
+              req = urllib.request.Request(url, headers={'User-Agent': 'PromptEdit-Deploy-Smoke/1.0'})
+              with urllib.request.urlopen(req, timeout=25) as response:
+                  return response.status, response.headers.get('content-type',''), response.read()
+
+          try:
+              status, mime, body = fetch(base+'/')
+              html = body.decode('utf-8', errors='replace')
+              print('HOME status:', status, 'content-type:', mime, 'bytes:', len(body))
+              print('HEAD snippet:', html[:3000])
+              parser = PageParser()
+              parser.feed(html)
+              print('Inertia mount:', parser.inertia)
+              print('Inline scripts:', parser.inline_scripts)
+              print('Assets:', parser.assets)
+              if not parser.inertia:
+                  print('ERROR: Inertia app mount missing')
+                  sys.exit(1)
+              if not any(asset.endswith('.js') or '.js?' in asset for asset in parser.assets):
+                  print('ERROR: no module JavaScript asset linked in page')
+                  sys.exit(1)
+              errors = []
+              for asset in parser.assets[:20]:
+                  if asset.startswith('//'):
+                      continue
+                  if asset.startswith('http') and not asset.startswith(base):
+                      continue
+                  url = urllib.parse.urljoin(base, asset)
+                  try:
+                      code, ct, content = fetch(url)
+                      print('ASSET', code, ct, len(content), asset)
+                      if code != 200 or 'text/html' in ct.lower():
+                          errors.append(asset)
+                  except Exception as ex:
+                      print('ASSET FAIL', asset, str(ex))
+                      errors.append(asset)
+              if errors:
+                  print('ERROR: assets failed:', errors)
+                  sys.exit(1)
+          except Exception as ex:
+              print('SMOKE FAIL:', repr(ex))
+              sys.exit(1)
+          PY
