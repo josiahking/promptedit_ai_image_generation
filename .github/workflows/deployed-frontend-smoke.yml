@@ -120,10 +120,15 @@ jobs:
               print('PAGE TITLE:', page.title())
               print('BODY TEXT:', page.locator('body').inner_text()[:1000])
               print('JS ERRORS:', errors)
+              page.get_by_role('heading', name='Imagine it. Make it real.').wait_for(timeout=10000)
               page.get_by_role('link', name='Log in').wait_for(timeout=10000)
+              page.get_by_role('link', name='Start creating').first.wait_for(timeout=10000)
+              if 'Let\'s get started' in page.locator('body').inner_text():
+                  print('FAIL: default Laravel landing page was deployed')
+                  sys.exit(1)
               if errors:
                   print('FAIL: browser JavaScript errors found')
                   sys.exit(1)
-              print('BROWSER RENDER PASS: Vue welcome page and login navigation are visible')
+              print('BROWSER RENDER PASS: custom PromptEdit landing page, login and registration links visible')
               browser.close()
           PY
