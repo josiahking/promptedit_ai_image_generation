@@ -94,3 +94,36 @@ jobs:
               print('SMOKE FAIL:', repr(ex))
               sys.exit(1)
           PY
+
+      - name: Install Playwright Chromium
+        run: |
+          python3 -m pip install --break-system-packages playwright
+          python3 -m playwright install --with-deps chromium
+
+      - name: Verify Vue renders in a real browser
+        env:
+          BASE_URL: https://prompteditaiimagegeneration-production.up.railway.app
+        run: |
+          python3 - <<'PY'
+          import os
+          import sys
+          from playwright.sync_api import sync_playwright
+
+          url = os.environ['BASE_URL']
+          with sync_playwright() as p:
+              browser = p.chromium.launch(headless=True)
+              page = browser.new_page()
+              errors = []
+              page.on('pageerror', lambda exc: errors.append(str(exc)))
+              response = page.goto(url, wait_until='networkidle', timeout=40000)
+              print('PAGE STATUS:', response.status if response else None)
+              print('PAGE TITLE:', page.title())
+              print('BODY TEXT:', page.locator('body').inner_text()[:1000])
+              print('JS ERRORS:', errors)
+              page.get_by_role('link', name='Log in').wait_for(timeout=10000)
+              if errors:
+                  print('FAIL: browser JavaScript errors found')
+                  sys.exit(1)
+              print('BROWSER RENDER PASS: Vue welcome page and login navigation are visible')
+              browser.close()
+          PY
