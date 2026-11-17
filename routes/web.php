@@ -9,7 +9,7 @@ Route::inertia('/', 'Welcome')->name('home');
 Route::post('/webhooks/pixelforge', PixelforgeWebhookController::class)
     ->name('webhooks.pixelforge');
 
-Route::middleware(['auth', 'verified'])->group(function () {
+Route::middleware(['auth'])->group(function () {
     Route::get('/dashboard', [GenerationController::class, 'index'])->name('dashboard');
     Route::post('/generations/estimate', [GenerationController::class, 'estimate'])
         ->middleware('throttle:30,1')

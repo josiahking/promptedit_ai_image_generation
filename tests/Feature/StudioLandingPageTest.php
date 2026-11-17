@@ -23,9 +23,9 @@ final class StudioLandingPageTest extends TestCase
         $this->get(route('register'))->assertOk();
     }
 
-    public function test_authenticated_user_can_still_access_landing_page_and_private_studio(): void
+    public function test_unverified_signed_in_user_can_open_studio_without_email_delivery(): void
     {
-        $this->actingAs(User::factory()->create())
+        $this->actingAs(User::factory()->unverified()->create())
             ->get(route('home'))->assertOk()
             ->assertInertia(fn (Assert $page) => $page->component('Welcome'));
 
