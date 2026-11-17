@@ -10,7 +10,10 @@ final class PricingService
 {
     private const CATEGORIES = ['input_text_tokens', 'input_image_tokens', 'output_tokens', 'reasoning_tokens'];
 
-    /** @param array<string,int> $usage @param array<string,string> $rates */
+    /**
+     * @param array<string, mixed> $usage
+     * @param array<string, mixed> $rates
+     */
     public function providerCost(array $usage, array $rates): Money
     {
         $cost = Money::zero();
@@ -23,16 +26,26 @@ final class PricingService
         return $cost;
     }
 
+    /**
+     * @param array<string, mixed> $usage
+     * @param array<string, mixed> $rates
+     */
     public function customerCost(array $usage, array $rates): Money
     {
         return $this->providerCost($usage, $rates)->withMarkup();
     }
 
-    /** @return array{estimated_usd:string,minimum_usd:string,maximum_usd:string} */
+    /**
+     * @param array<string, mixed> $pricing
+     * @return array{estimated_usd:string,minimum_usd:string,maximum_usd:string}
+     */
     public function estimate(string $prompt, string $size, string $quality, int $references, array $pricing): array
     {
         $tokens = $pricing['tokens'] ?? [];
         $rates = $pricing['rates'] ?? [];
+        if (!is_array($tokens) || !is_array($rates)) {
+            throw new InvalidArgumentException('Invalid pricing payload.');
+        }
         $characters = preg_match_all('/./us', $prompt);
         if ($characters === false || $characters < 1 || $characters > 4000 || $references < 0 || $references > 4) {
             throw new InvalidArgumentException('Invalid prompt or reference image count.');
