@@ -70,11 +70,15 @@ jobs:
                   sys.exit(1)
               errors = []
               for asset in parser.assets[:20]:
-                  if asset.startswith('//'):
-                      continue
-                  if asset.startswith('http') and not asset.startswith(base):
-                      continue
                   url = urllib.parse.urljoin(base, asset)
+                  parts = urllib.parse.urlparse(url)
+                  if parts.scheme != 'https':
+                      print('MIXED CONTENT: insecure asset URL', url)
+                      errors.append(asset)
+                      continue
+                  if parts.netloc != urllib.parse.urlparse(base).netloc:
+                      print('EXTERNAL ASSET: skipping cross-host probe', url)
+                      continue
                   try:
                       code, ct, content = fetch(url)
                       print('ASSET', code, ct, len(content), asset)
