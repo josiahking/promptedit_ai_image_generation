@@ -77,6 +77,38 @@ final class PixelforgeClient
         return $data;
     }
 
+    /** @return array<string, mixed> */
+    public function findGeneration(string $providerId): array
+    {
+        if (! preg_match('/^gen_[A-Za-z0-9_-]+$/D', $providerId)) {
+            throw new \InvalidArgumentException('Invalid Pixelforge generation ID.');
+        }
+
+        $key = config('services.pixelforge.key');
+
+        if (! is_string($key) || $key === '') {
+            throw new LogicException('Pixelforge API key is not configured.');
+        }
+
+        $response = Http::acceptJson()
+            ->withToken($key)
+            ->timeout(15)
+            ->get($this->url('generations/'.$providerId));
+
+        if (! $response->successful()) {
+            throw $this->apiError($response);
+        }
+
+        $data = $response->json();
+
+        if (! is_array($data) || ($data['id'] ?? null) !== $providerId
+            || ! in_array($data['status'] ?? null, ['queued', 'processing', 'succeeded', 'failed'], true)) {
+            throw new UnexpectedValueException('Pixelforge returned an invalid generation snapshot.');
+        }
+
+        return $data;
+    }
+
     private function url(string $path): string
     {
         $base = config('services.pixelforge.base_url');
