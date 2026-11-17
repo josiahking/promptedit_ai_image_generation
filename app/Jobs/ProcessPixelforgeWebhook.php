@@ -48,7 +48,7 @@ final class ProcessPixelforgeWebhook implements ShouldQueue
             // The provider ID must match if the local submission has already been acknowledged.
             $apply->execute($generation, $snapshot);
 
-            $event->processed_at = now();
+            $event->setAttribute('processed_at', now());
             $event->processing_error = null;
             $event->save();
         });
