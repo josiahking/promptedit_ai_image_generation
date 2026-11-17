@@ -17,6 +17,11 @@ final class Generation extends Model
     {
         return [
             'reference_images' => 'array',
+            'estimated_customer_usd' => 'decimal:12',
+            'minimum_customer_usd' => 'decimal:12',
+            'maximum_customer_usd' => 'decimal:12',
+            'provider_cost_usd' => 'decimal:12',
+            'customer_cost_usd' => 'decimal:12',
             'usage' => 'array',
             'rates_snapshot' => 'array',
             'provider_created_at' => 'immutable_datetime',
