@@ -1,0 +1,92 @@
+name: Production Pixelforge end-to-end check
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - main
+    paths:
+      - '.github/workflows/production-pixelforge-e2e.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  live-browser:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - name: Install Playwright
+        run: |
+          python3 -m pip install --break-system-packages playwright
+          python3 -m playwright install --with-deps chromium
+
+      - name: Create isolated account and verify one simulated generation
+        env:
+          APP_URL: https://prompteditaiimagegeneration-production.up.railway.app
+        run: |
+          python3 - <<'PY'
+          import os
+          import secrets
+          import sys
+          import time
+          import uuid
+          from playwright.sync_api import sync_playwright, TimeoutError as PlaywrightTimeout
+
+          app = os.environ['APP_URL']
+          tag = uuid.uuid4().hex[:12]
+          email = 'promptedit-review-smoke-' + tag + '@example.com'
+          password = secrets.token_urlsafe(24) + 'Aa1!'
+          prompt = '[succeed] assessment production smoke ' + tag + ': an abstract blue mountain landscape'
+          errors = []
+          failed_responses = []
+
+          with sync_playwright() as p:
+              browser = p.chromium.launch(headless=True)
+              page = browser.new_page()
+              page.on('pageerror', lambda e: errors.append(str(e)))
+              page.on('response', lambda r: failed_responses.append((r.status, r.url.split('?')[0])) if r.status >= 500 and app in r.url else None)
+              try:
+                  response = page.goto(app + '/register', wait_until='domcontentloaded', timeout=40000)
+                  print('REGISTER:', response.status if response else 'no response')
+                  page.locator('#name').fill('PromptEdit production reviewer smoke')
+                  page.locator('#email').fill(email)
+                  page.locator('#password').fill(password)
+                  page.locator('#password_confirmation').fill(password)
+                  page.locator('[data-test="register-user-button"]').click()
+                  page.wait_for_url('**/dashboard', timeout=25000)
+                  print('REGISTRATION: signed in and redirected to studio')
+
+                  page.locator('#prompt').fill(prompt)
+                  page.locator('#quality').select_option('low')
+                  button = page.get_by_role('button', name='Generate image')
+                  button.wait_for(state='visible', timeout=20000)
+                  button.click(timeout=30000)
+                  print('GENERATION: submission requested')
+
+                  deadline = time.monotonic() + 140
+                  success = False
+                  while time.monotonic() < deadline:
+                      body = page.locator('body').inner_text()
+                      if 'succeeded' in body.lower() and prompt in body:
+                          success = True
+                          break
+                      if 'failed' in body.lower() and prompt in body:
+                          print('ERROR: provider generation failed')
+                          break
+                      page.wait_for_timeout(5000)
+                  print('GENERATION STATUS:', 'succeeded' if success else 'not confirmed')
+                  print('BROWSER JS ERRORS:', errors[:6])
+                  print('SERVER ERRORS:', failed_responses[:6])
+                  if not success or errors or failed_responses:
+                      sys.exit(1)
+                  print('PRODUCTION PIXELFORGE E2E: PASS')
+              except Exception as ex:
+                  print('E2E BLOCKER:', type(ex).__name__, str(ex)[:700])
+                  print('CURRENT URL:', page.url)
+                  print('BROWSER JS ERRORS:', errors[:5])
+                  print('SERVER ERRORS:', failed_responses[:5])
+                  sys.exit(1)
+              finally:
+                  browser.close()
+          PY
