@@ -8,69 +8,31 @@ An authenticated Laravel, Vue, and Inertia application with a public introductio
 - PostgreSQL for application data
 - Laravel database queues for asynchronous provider requests
 
-## Local setup
+## Local development with Docker Compose
 
-### Requirements
-
-PHP 8.3+, Composer 2, Node.js 22+, npm, and PostgreSQL.
+Use Docker Desktop (Linux containers enabled), Git and Docker Compose. No host PHP, Composer, Node, PostgreSQL or Laravel Sail installation is needed.
 
 ```bash
 git clone https://github.com/josiahking/promptedit_ai_image_generation.git
 cd promptedit_ai_image_generation
+cp .env.docker.example .env
 
-composer install
-npm install
-cp .env.example .env
-php artisan key:generate
+docker compose build app
+docker compose up -d db
+docker compose run --rm --no-deps app composer install --no-interaction
+docker compose run --rm --no-deps app npm install
+docker compose run --rm --no-deps app php artisan key:generate
+docker compose up -d app
+docker compose exec -T app php artisan migrate --force
+docker compose up -d frontend worker scheduler
+docker compose ps
 ```
 
-Configure the database and Pixelforge credentials in `.env`:
+Open **http://localhost:8000**. Docker Compose runs the PHP web application, Vite, PostgreSQL, a queue worker and a scheduler. All services share one project-owned PHP/Node development image.
 
-```dotenv
-DB_CONNECTION=pgsql
-DB_HOST=127.0.0.1
-DB_PORT=5432
-DB_DATABASE=promptedit
-DB_USERNAME=postgres
-DB_PASSWORD=
+Keep API keys and webhook signing secrets in your **local** `.env`, never in Git. Your Railway production deployment has its own database and secrets.
 
-PIXELFORGE_BASE_URL=https://pixelforge.promptedit.dev/v1
-PIXELFORGE_API_KEY=
-PIXELFORGE_WEBHOOK_SECRET=
-```
-
-Create the database before running migrations. Use separate Pixelforge API keys and webhook signing secrets for local and deployed environments; never commit credentials.
-
-```bash
-php artisan migrate
-php artisan serve
-```
-
-In separate terminals:
-
-```bash
-npm run dev
-php artisan queue:work
-php artisan schedule:work
-```
-
-Configure the webhook URL for the relevant Pixelforge API key as `https://YOUR_APP_DOMAIN/webhooks/pixelforge`. The endpoint must be publicly reachable; local development requires a secure tunnel. The queue worker processes received events, and the scheduler executes `pixelforge:reconcile` every minute to recover stale generations and unprocessed events.
-
-### Docker / Laravel Sail
-
-For a reproducible local PostgreSQL environment, use the dedicated local configuration rather than installing PostgreSQL on your host:
-
-```bash
-cp .env.sail.example .env
-composer install
-./vendor/bin/sail up -d --build
-./vendor/bin/sail artisan key:generate
-./vendor/bin/sail artisan migrate --force
-./vendor/bin/sail npm install
-./vendor/bin/sail npm run build
-```
-
-Sail starts the app, PostgreSQL, a queue worker, and a scheduler. Keep local credentials separate from the production Railway environment. See [local development and testing](docs/LOCAL-DEVELOPMENT.md) for complete setup, Vite, PostgreSQL tests, and live webhook testing.
+For tests, Windows Git Bash setup, PostgreSQL test isolation, troubleshooting and live Pixelforge webhooks, follow [local development and testing](docs/LOCAL-DEVELOPMENT.md).
 
 ## Architecture
 

@@ -1,109 +1,123 @@
-# Local development with Laravel Sail
+# Local development with Docker Compose
 
-Use this setup for local development and testing. Railway is the separate public production deployment; it uses its own PostgreSQL database and environment variables.
+The local environment uses **plain Docker Compose** with a project-owned Dockerfile. Laravel Sail is not required or used. Railway production remains separate and is not changed by these commands.
 
 ## Requirements
 
-- Docker Desktop with Linux containers and WSL2 enabled on Windows
-- Git
-- Composer 2 and PHP 8.3+ **or** a temporary Composer Docker container for bootstrapping
+Install Docker Desktop (Linux containers enabled) and Git. On Windows, Docker Desktop should use the WSL2 backend, but **all commands below can be run from Git Bash or PowerShell**. You do not need PHP, Composer, Node or PostgreSQL installed on the host.
 
 ## First-time setup
 
-From Windows Git Bash, WSL or a Linux/macOS terminal:
+Clone the repository if needed, then create a local configuration:
 
 ```bash
 git clone https://github.com/josiahking/promptedit_ai_image_generation.git
 cd promptedit_ai_image_generation
-cp .env.sail.example .env
-composer install
-./vendor/bin/sail up -d --build
-./vendor/bin/sail artisan key:generate
-./vendor/bin/sail artisan migrate --force
-./vendor/bin/sail npm install
-./vendor/bin/sail npm run dev
+cp .env.docker.example .env
 ```
 
-The final command runs Vite in the foreground. Keep that terminal open and visit **http://localhost:8000**. Worker and scheduler run as separate Docker Compose services.
+If you have an existing local `.env`, **back it up first** before replacing it. The example uses `DB_HOST=db` and a local-only password. Do not copy it to Railway.
 
-If Composer is not installed locally, substitute the `composer install` step with the following command in **WSL2/Linux**:
+Build the application image **once** before starting the other services that share it:
 
 ```bash
-docker run --rm --user "$(id -u):$(id -g)" -v "$PWD:/app" -w /app composer:2 install --no-interaction
+docker compose build app
+docker compose up -d db
 ```
 
-In **Windows Git Bash**, Docker's Windows path translation can interfere with mounts. Use:
+Install the application dependencies **inside Docker**, not on the Windows host:
 
 ```bash
-MSYS_NO_PATHCONV=1 docker run --rm -v "$(pwd -W):/app" -w /app composer:2 install --no-interaction
+docker compose run --rm --no-deps app composer install --no-interaction
+docker compose run --rm --no-deps app npm install
+docker compose run --rm --no-deps app php artisan key:generate
 ```
 
-If Docker Compose reports port 5432 in use, set `FORWARD_DB_PORT=5433` in `.env`. If 8000 is used, set `APP_PORT=8001` and `APP_URL=http://localhost:8001`. Restart Sail after changing ports.
-
-The `.env.sail.example` file is a safe **local-only template**. Keep `.env`, `PIXELFORGE_API_KEY` and `PIXELFORGE_WEBHOOK_SECRET` out of Git. Use **a different Pixelforge API key per environment**, as each key has its own usage report and webhook secret.
-
-## Daily commands
+Start the web app, apply migrations, then start the remaining processes:
 
 ```bash
-./vendor/bin/sail up -d
-./vendor/bin/sail npm run dev
+docker compose up -d app
+docker compose exec -T app php artisan migrate --force
+docker compose up -d frontend worker scheduler
+docker compose ps
 ```
 
-The local setup includes Laravel/PHP 8.3, PostgreSQL 17, queue worker, scheduler and Vite. Check that all processes are healthy:
+Visit **http://localhost:8000**. Vite is already running inside the `frontend` service at port 5173. No separate `npm run dev` terminal is required. The worker and scheduler run as dedicated services.
+
+The image builds PHP 8.3 with PostgreSQL and SQLite extensions, Composer 2, and Node 22. It does not install Sail, a separate PostgreSQL APT repository, or browser-testing packages.
+
+## Daily workflow
 
 ```bash
-./vendor/bin/sail ps
-docker compose logs --tail=80 worker scheduler
-./vendor/bin/sail artisan schedule:list
+docker compose up -d
+docker compose ps
+docker compose logs --tail=80 app frontend worker scheduler
 ```
 
-## Testing
+If you change the Dockerfile, rebuild explicitly:
 
 ```bash
-./vendor/bin/sail artisan test
-./vendor/bin/sail composer ci:check
+docker compose build app
+docker compose up -d --no-build --force-recreate app frontend worker scheduler
 ```
 
-The project's default test configuration uses SQLite. For a separate PostgreSQL test database, first create it:
+After editing PHP or Vue files, bind mounts make changes available immediately. You can run one-off commands:
 
 ```bash
-docker compose exec -T pgsql sh -c 'PGPASSWORD="$POSTGRES_PASSWORD" createdb -U "$POSTGRES_USER" promptedit_test'
+docker compose exec -T app php artisan route:list
+docker compose exec -T app php artisan test
+docker compose exec -T app composer ci:check
+docker compose exec -T app npm run build
 ```
 
-Then run the suite against **that test database only**:
+## Test against PostgreSQL safely
+
+The default test setup uses SQLite in memory. To run the suite against PostgreSQL, **create a dedicated test database**:
 
 ```bash
-./vendor/bin/sail exec -e DB_CONNECTION=pgsql -e DB_URL= -e DB_HOST=pgsql -e DB_DATABASE=promptedit_test laravel.test php artisan test
+docker compose exec -T db sh -c 'PGPASSWORD="$POSTGRES_PASSWORD" createdb -U "$POSTGRES_USER" promptedit_test'
 ```
 
-Never run tests using your development database or Railway production database.
-
-## Testing Pixelforge locally
-
-Add your local key to `.env`, then restart the web and worker services:
+Then run the suite with explicit test database settings:
 
 ```bash
-./vendor/bin/sail restart
+docker compose exec -T -e DB_CONNECTION=pgsql -e DB_URL= -e DB_HOST=db -e DB_DATABASE=promptedit_test app php artisan test
 ```
 
-Try `[succeed]`, `[fail]`, `[duplicate]`, `[slow]` and `[overloaded]` in prompts to test provider behavior.
+Never run destructive tests against your normal development database or Railway production database.
 
-Pixelforge cannot deliver webhook events directly to localhost. For real webhooks, expose port 8000 through an HTTPS tunnel and register `https://YOUR-TUNNEL/webhooks/pixelforge` as your **local key's** webhook URL. Use that key's signing secret in `.env`; never reuse the production key or secret. You can verify polling recovery independently with:
+## Pixelforge local testing
+
+Add a **separate local** `PIXELFORGE_API_KEY` and `PIXELFORGE_WEBHOOK_SECRET` to `.env`; restart the services after changing environment values:
 
 ```bash
-./vendor/bin/sail artisan pixelforge:reconcile
+docker compose up -d --force-recreate app worker scheduler
 ```
 
-After completing real generations, reconcile the key's UTC daily usage:
+Try prompts containing `[succeed]`, `[fail]`, `[duplicate]`, `[slow]` and `[overloaded]` to exercise provider behavior.
+
+The provider cannot call localhost for webhooks. Use an HTTPS tunnel pointing at local port 8000, register `https://YOUR-TUNNEL/webhooks/pixelforge` for the **local** key, and configure that key's webhook secret in local `.env`. The local key and production Railway key should be different.
 
 ```bash
-./vendor/bin/sail artisan pixelforge:usage-reconcile --start=2026-11-17 --end=2026-11-17
+docker compose exec -T app php artisan pixelforge:reconcile
+docker compose exec -T app php artisan pixelforge:usage-reconcile --start=2026-11-17 --end=2026-11-17
 ```
 
-Replace the dates with actual generation completion days. The command exits nonzero on any discrepancy.
+Replace the dates with the real UTC completion dates.
 
-Stop your local containers using `./vendor/bin/sail down`. Do not run `down -v` unless you intend to remove local PostgreSQL data.
+## Troubleshooting on Windows
+
+- **Sail reports an unsupported operating system:** these instructions do not use Sail; run `docker compose` directly.
+- **Docker cannot connect:** start Docker Desktop and enable Linux containers / WSL2 integration.
+- **Port 5432 in use:** set `FORWARD_DB_PORT=5433` in `.env`, then recreate the `db` service. The internal database host stays `db:5432`.
+- **Port 8000 in use:** set `APP_PORT=8001` and `APP_URL=http://localhost:8001` in `.env`.
+- **Missing `vendor/autoload.php` or Node modules:** rerun the corresponding Docker-based Composer or npm install command.
+- **Database connection refused:** verify `docker compose ps`, `docker compose logs db`, and `DB_HOST=db`.
+- **Blank page or stale Vite:** check `docker compose logs frontend` and ensure both 8000 and 5173 are free.
+- **Initial image download fails:** retry `docker compose build app`; don't edit ignored dependencies inside `vendor`.
+
+Shut down containers with `docker compose down`. Do **not** use `down -v` unless you intend to delete your local PostgreSQL data and Node modules.
 
 ## Railway production
 
-Railway serves the public app at https://prompteditaiimagegeneration-production.up.railway.app and uses a separate PostgreSQL service, queue worker and scheduler. Never copy the local Compose password into Railway. Push changes to `main` only after checks pass; Railway redeploys from GitHub. Set Pixelforge credentials securely in Railway service variables, not in the repository.
+Railway remains the public demonstration environment at https://prompteditaiimagegeneration-production.up.railway.app with a separate PostgreSQL service and worker/scheduler. This Compose configuration is for **local development only**. Never copy its development credentials to Railway.
