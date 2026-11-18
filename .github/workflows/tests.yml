@@ -69,3 +69,25 @@ jobs:
           CACHE_STORE: array
           SESSION_DRIVER: array
         run: php artisan test
+
+  docker-build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Prepare local Docker settings
+        run: cp .env.docker.example .env
+
+      - name: Build project-owned PHP and Node image
+        run: docker compose build app
+
+      - name: Verify required runtimes inside image
+        run: |
+          docker compose run --rm --no-deps app php -m | grep -E 'pdo_pgsql|pdo_sqlite|mbstring'
+          docker compose run --rm --no-deps app composer --version
+          docker compose run --rm --no-deps app node --version
+          docker compose run --rm --no-deps app npm --version
