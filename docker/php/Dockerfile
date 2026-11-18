@@ -12,7 +12,7 @@ RUN apt-get update \
         git unzip ca-certificates \
         libpq-dev libonig-dev libzip-dev libicu-dev libsqlite3-dev \
     && docker-php-ext-install -j2 \
-        bcmath intl mbstring pcntl pdo_pgsql pgsql pdo_sqlite sqlite3 zip \
+        bcmath intl mbstring pcntl pdo_pgsql pgsql zip \
     && rm -rf /var/lib/apt/lists/*
 
 COPY --from=composer /usr/bin/composer /usr/local/bin/composer
