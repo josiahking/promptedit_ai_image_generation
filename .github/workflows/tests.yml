@@ -50,7 +50,7 @@ jobs:
         run: composer setup
 
       - name: Validate local Docker Compose configuration
-        run: cp .env.docker.example .env && docker compose config --quiet
+        run: docker compose --env-file .env.docker.example config --quiet
 
       - name: Run CI Checks
         run: composer ci:check
