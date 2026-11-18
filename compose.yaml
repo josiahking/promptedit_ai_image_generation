@@ -1,83 +1,81 @@
+# Local Docker Compose only. Not used by Railway production.
+# First build the one shared app image: docker compose build app
+x-php-service: &php-service
+  image: promptedit/php:local
+  working_dir: /var/www/html
+  env_file:
+    - .env
+  volumes:
+    - ./:/var/www/html
+    - node_modules:/var/www/html/node_modules
+  networks:
+    - promptedit
+
 services:
-    laravel.test:
-        build:
-            context: ./vendor/laravel/sail/runtimes/8.3
-            dockerfile: Dockerfile
-            args:
-                WWWGROUP: '${WWWGROUP:-1000}'
-        image: sail-8.3/promptedit
-        extra_hosts:
-            - 'host.docker.internal:host-gateway'
-        ports:
-            - '${APP_PORT:-8000}:80'
-            - '${VITE_PORT:-5173}:${VITE_PORT:-5173}'
-        environment:
-            WWWUSER: '${WWWUSER:-1000}'
-            LARAVEL_SAIL: '1'
-            XDEBUG_MODE: '${SAIL_XDEBUG_MODE:-off}'
-            XDEBUG_CONFIG: '${SAIL_XDEBUG_CONFIG:-client_host=host.docker.internal}'
-            VITE_PORT: '${VITE_PORT:-5173}'
-        volumes:
-            - ./:/var/www/html
-        networks:
-            - sail
-        depends_on:
-            pgsql:
-                condition: service_healthy
-    worker:
-        image: sail-8.3/promptedit
-        command: php artisan queue:work --sleep=1 --tries=3 --timeout=60
-        working_dir: /var/www/html
-        environment:
-            WWWUSER: '${WWWUSER:-1000}'
-            LARAVEL_SAIL: '1'
-        volumes:
-            - ./:/var/www/html
-        networks:
-            - sail
-        depends_on:
-            pgsql:
-                condition: service_healthy
-            laravel.test:
-                condition: service_started
-        restart: unless-stopped
-    scheduler:
-        image: sail-8.3/promptedit
-        command: php artisan schedule:work
-        working_dir: /var/www/html
-        environment:
-            WWWUSER: '${WWWUSER:-1000}'
-            LARAVEL_SAIL: '1'
-        volumes:
-            - ./:/var/www/html
-        networks:
-            - sail
-        depends_on:
-            pgsql:
-                condition: service_healthy
-            laravel.test:
-                condition: service_started
-        restart: unless-stopped
-    pgsql:
-        image: postgres:17-alpine
-        ports:
-            - '${FORWARD_DB_PORT:-5432}:5432'
-        environment:
-            POSTGRES_DB: '${DB_DATABASE:-promptedit}'
-            POSTGRES_USER: '${DB_USERNAME:-sail}'
-            POSTGRES_PASSWORD: '${DB_PASSWORD:-password}'
-        volumes:
-            - sail-pgsql:/var/lib/postgresql/data
-        networks:
-            - sail
-        healthcheck:
-            test: ['CMD-SHELL', 'pg_isready -U "${DB_USERNAME:-sail}" -d "${DB_DATABASE:-promptedit}"']
-            interval: 5s
-            timeout: 5s
-            retries: 15
+  app:
+    <<: *php-service
+    build:
+      context: .
+      dockerfile: docker/php/Dockerfile
+    ports:
+      - "${APP_PORT:-8000}:8000"
+    depends_on:
+      db:
+        condition: service_healthy
+    command: php artisan serve --host=0.0.0.0 --port=8000
+
+  frontend:
+    <<: *php-service
+    command: npm run dev -- --host=0.0.0.0
+    ports:
+      - "${VITE_PORT:-5173}:5173"
+    depends_on:
+      app:
+        condition: service_started
+    restart: unless-stopped
+
+  worker:
+    <<: *php-service
+    command: php artisan queue:work --sleep=1 --tries=3 --timeout=60
+    depends_on:
+      db:
+        condition: service_healthy
+      app:
+        condition: service_started
+    restart: unless-stopped
+
+  scheduler:
+    <<: *php-service
+    command: php artisan schedule:work
+    depends_on:
+      db:
+        condition: service_healthy
+      app:
+        condition: service_started
+    restart: unless-stopped
+
+  db:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_DB: "${DB_DATABASE:-promptedit}"
+      POSTGRES_USER: "${DB_USERNAME:-promptedit}"
+      POSTGRES_PASSWORD: "${DB_PASSWORD:-localpassword}"
+    ports:
+      - "${FORWARD_DB_PORT:-5432}:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    networks:
+      - promptedit
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U \"$$POSTGRES_USER\" -d \"$$POSTGRES_DB\""]
+      interval: 5s
+      timeout: 5s
+      retries: 15
+
 networks:
-    sail:
-        driver: bridge
+  promptedit:
+    driver: bridge
+
 volumes:
-    sail-pgsql:
-        driver: local
+  pgdata:
+  node_modules:
