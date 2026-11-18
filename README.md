@@ -1,16 +1,98 @@
 # Pixelforge Image Generation
 
-An authenticated Laravel, Vue, and Inertia application with a public introduction and private per-user generation studio, integrating the [Pixelforge API](https://pixelforge.promptedit.dev/docs) for asynchronous AI image generation.
+**A full-stack AI image generation application built around reliable asynchronous processing, exact usage-based billing, and recoverable third-party API integrations.**
 
-## Technology
+Built with **Laravel 13, Vue 3, Inertia, TypeScript, PostgreSQL, and Docker**, the application provides a public introduction and an authenticated, per-user generation studio. It integrates with the [Pixelforge API](https://pixelforge.promptedit.dev/docs) to submit image generation requests, track their lifecycle, process signed webhooks, and reconcile provider usage against local records.
 
-- PHP 8.3+, Laravel 13, Vue 3, Inertia, TypeScript, and Tailwind CSS
-- PostgreSQL for application data
-- Laravel database queues for asynchronous provider requests
+> **Project focus:** This repository demonstrates backend and full-stack engineering decisions for an AI-powered application, especially idempotency, asynchronous workflows, failure recovery, billing precision, and automated testing.
 
-## Local development with Docker Compose
+## What the application does
 
-Use Docker Desktop (Linux containers enabled), Git and Docker Compose. No host PHP, Composer, Node, PostgreSQL or Laravel Sail installation is needed.
+- **Authenticated generation studio:** Keeps generation requests and results associated with their users.
+- **Asynchronous provider integration:** Queues image generation submissions instead of blocking web requests.
+- **Reliable request tracking:** Persists a local generation ID and immutable idempotency key before contacting the provider.
+- **Webhook-driven updates:** Verifies signed provider callbacks, records incoming events, and processes them asynchronously.
+- **Recovery and reconciliation:** Polls stale generation states and reconciles daily provider usage with locally recorded results.
+- **Exact cost accounting:** Calculates token-based estimates and final charges without floating-point money errors.
+- **Automated quality checks:** Exercises API contracts, failure scenarios, event ordering, state transitions, and billing rules.
+
+## Engineering highlights
+
+| Concern | Implementation decision |
+| --- | --- |
+| **API reliability** | Persist first, submit with an immutable idempotency key, and distinguish unknown submission outcomes from confirmed failures. |
+| **Background processing** | Database-backed Laravel queues, bounded retries, and a scheduler for recovery work. |
+| **Webhook security** | HMAC-SHA256 signature validation over the timestamp and raw request body, with a five-minute timestamp tolerance. |
+| **Duplicate and out-of-order events** | Unique provider event IDs, persisted receipts, transactions, and row-level locks protect generation state. |
+| **Billing accuracy** | Integer picodollars (12 decimal places), exact provider rate strings, and a 25% customer markup. |
+| **Operational reconciliation** | Compare provider usage and costs with successful local generations by UTC completion day; fail visibly on discrepancies. |
+| **Test coverage** | PHPUnit integration tests, Laravel HTTP fakes, static analysis, frontend checks, and CI against SQLite and PostgreSQL. |
+
+## System architecture
+
+The application follows Laravel conventions with a focused service/action layer. Controllers handle HTTP concerns, actions coordinate business workflows, jobs perform background work, and a dedicated API client isolates Pixelforge-specific behavior.
+
+```mermaid
+flowchart TD
+    A[Authenticated user] --> B[Laravel application]
+    B --> C[Persist generation and idempotency key]
+    C --> D[Queue submission job]
+    D --> E[Pixelforge API]
+    E --> F[Signed webhook]
+    F --> G[Verify and persist event]
+    G --> H[Queue event processing]
+    H --> I[Apply generation state and final billing]
+    J[Scheduled polling and reconciliation] --> E
+    J --> I
+```
+
+### Key implementation files
+
+| Component | Responsibility |
+| --- | --- |
+| `app/Support/Money.php` | Immutable, exact USD arithmetic |
+| `app/Services/PricingService.php` | Token-based estimates, provider costs, and 25% markup |
+| `app/Services/PixelforgeClient.php` | API authentication, pricing lookup, generation creation, and provider error classification |
+| `app/Actions/PersistGeneration.php` | Store user ownership, request parameters, estimate, and idempotency key |
+| `app/Actions/SubmitGeneration.php` | Obtain pricing and dispatch generation submission |
+| `app/Jobs/SubmitPixelforgeGeneration.php` | Execute queued provider requests with bounded retries |
+| `app/Actions/RecordPixelforgeAcknowledgement.php` | Attach provider identity and rates without regressing generation state |
+| `app/Models/Generation.php` | Generation state, costs, usage, and provider metadata |
+| `app/Http/Controllers/PixelforgeWebhookController.php` | Verify raw-body HMAC signature and persist event receipt |
+| `app/Jobs/ProcessPixelforgeWebhook.php` | Deduplicate processing and lock generation updates |
+| `app/Actions/ApplyPixelforgeGeneration.php` | Shared webhook/polling transition and exact final billing policy |
+| `app/Console/Commands/ReconcilePixelforgeGenerations.php` | Retry unprocessed events and poll stale provider states |
+| `app/Services/UsageReconciliationService.php` | Reconcile provider usage and exact charges by UTC completion day |
+| `app/Console/Commands/ReconcilePixelforgeUsage.php` | CLI date-range validation and discrepancy reporting |
+
+## Important design decisions
+
+**Exact pricing.** Money is represented as integer picodollars rather than PHP floating-point values. Token costs use exact rate strings. Estimates follow provider pricing rules, while final charges use the usage and rates associated with each completed generation. The application preserves precision in storage instead of rounding early to cents.
+
+**Persist before submission.** A local UUID and immutable idempotency key are created before any outbound generation request. The UUID is sent as `metadata.order_id`. Retries reuse the same key and parameters so a timeout does not silently create a second billable generation.
+
+**Explicit failure semantics.** Validation and policy rejections are separate from provider failures. Rate limits and overloads use bounded retries and `Retry-After` where available. An indeterminate outcome remains `submission_unknown` rather than being misclassified as a confirmed failure.
+
+**Safe state transitions.** Webhook events are verified and stored before a prompt 2xx response. Queued processing uses transactions and row locks to avoid duplicate finalization and terminal-state regression. Scheduled polling shares the transition and pricing logic as a recovery path if webhooks are missed.
+
+**Reconciliation.** The `pixelforge:usage-reconcile` command compares the provider's per-key UTC daily usage against locally successful generations, including four token categories, provider costs, and the 25% markup. Mismatches cause a nonzero exit rather than being ignored.
+
+**Pragmatic abstractions.** Eloquent is used directly for persistence; a generic repository layer is intentionally avoided where it would add indirection without improving the workflows.
+
+## Technology stack
+
+| Layer | Technology |
+| --- | --- |
+| Backend | PHP 8.3+, Laravel 13 |
+| Frontend | Vue 3, Inertia, TypeScript, Tailwind CSS |
+| Database | PostgreSQL |
+| Background processing | Laravel database queues and scheduler |
+| Local environment | Docker Compose |
+| Testing and CI | PHPUnit, HTTP fakes, formatting, static analysis, frontend checks, SQLite and PostgreSQL 17 |
+
+## Run locally with Docker Compose
+
+**Prerequisites:** Docker Desktop (with Linux containers enabled), Git, and Docker Compose. You do not need host PHP, Composer, Node.js, PostgreSQL, or Laravel Sail installations.
 
 ```bash
 git clone https://github.com/josiahking/promptedit_ai_image_generation.git
@@ -28,55 +110,24 @@ docker compose up -d frontend worker scheduler
 docker compose ps
 ```
 
-Open **http://localhost:8000**. Docker Compose runs the PHP web application, Vite, PostgreSQL, a queue worker and a scheduler. All services share one project-owned PHP/Node development image.
+Open **http://localhost:8000**. Docker Compose starts the PHP application, Vite, PostgreSQL, queue worker, and scheduler using the project-owned development image.
 
-Keep API keys and webhook signing secrets in your **local** `.env`, never in Git. Your Railway production deployment has its own database and secrets.
+Keep provider API keys and webhook signing secrets in your **local** `.env`; never commit them. Deployment environments require their own database and secret configuration.
 
-For tests, Windows Git Bash setup, PostgreSQL test isolation, troubleshooting and live Pixelforge webhooks, follow [local development and testing](docs/LOCAL-DEVELOPMENT.md).
+For Windows Git Bash setup, PostgreSQL test isolation, troubleshooting, and live webhook configuration, see [Local development and testing](docs/LOCAL-DEVELOPMENT.md).
 
-## Architecture
+## Testing and verification
 
-The application follows Laravel conventions with a small service layer. Controllers own HTTP concerns; application actions coordinate workflows; the Pixelforge client isolates provider-specific requests and responses.
+Use the isolated test settings in [the daily development workflow](docs/LOCAL-DEVELOPMENT.md#daily-workflow) when running:
 
-| Component                                                 | Responsibility                                                                             |
-| --------------------------------------------------------- | ------------------------------------------------------------------------------------------ |
-| `app/Support/Money.php`                                   | Immutable, exact USD arithmetic                                                            |
-| `app/Services/PricingService.php`                         | Token-based estimates, provider costs, and 25% markup                                      |
-| `app/Services/PixelforgeClient.php`                       | API authentication, pricing lookup, generation creation, and provider error classification |
-| `app/Actions/PersistGeneration.php`                       | Store user ownership, request parameters, estimate, and idempotency key                    |
-| `app/Actions/SubmitGeneration.php`                        | Obtain pricing and dispatch generation submission                                          |
-| `app/Jobs/SubmitPixelforgeGeneration.php`                 | Execute queued provider requests with bounded retries                                      |
-| `app/Actions/RecordPixelforgeAcknowledgement.php`         | Attach provider identity and rates without regressing generation state                     |
-| `app/Models/Generation.php`                               | Generation state, costs, usage, and provider metadata                                      |
-| `app/Http/Controllers/PixelforgeWebhookController.php`    | Verify raw-body HMAC signature and persist event receipt                                   |
-| `app/Jobs/ProcessPixelforgeWebhook.php`                   | Deduplicate processing and lock generation updates                                         |
-| `app/Actions/ApplyPixelforgeGeneration.php`               | Shared webhook/polling transition and exact final billing policy                           |
-| `app/Console/Commands/ReconcilePixelforgeGenerations.php` | Retry unprocessed events and poll stale provider states                                    |
-| `app/Services/UsageReconciliationService.php`             | Reconcile provider usage and exact charges by UTC completion day                           |
-| `app/Console/Commands/ReconcilePixelforgeUsage.php`       | CLI date-range validation and discrepancy reporting                                        |
+```bash
+php artisan test
+composer ci:check
+```
 
-### Technical decisions and trade-offs
+CI covers PHP formatting, static analysis, frontend checks, and PHPUnit. Integration tests use Laravel HTTP fakes to exercise provider contracts, idempotency, timeouts, overloads, acknowledgement races, webhook signatures, duplicate and out-of-order events, exact final charges, polling recovery, and persisted state. CI runs with SQLite in memory and PostgreSQL 17; local Sail uses PostgreSQL.
 
-**Exact pricing.** Money is represented as integer picodollars (12 decimal places), not PHP floating-point values. Token costs are calculated from exact rate strings, and the customer markup is 25%. Estimates use the provider's pricing rules; final billing must use the usage and rates associated with the individual completed generation. Precision is preserved in storage rather than rounding early to cents.
+## API reference
 
-**Persist before submission.** Every generation has a local UUID and an immutable idempotency key before any outbound creation request. The local UUID is passed as `metadata.order_id`. Repeated requests use the same key and parameters so a timeout cannot silently create a second billable generation.
-
-**Asynchronous processing.** Provider creation runs in a database-backed queue instead of holding an HTTP request open. The additional worker process is a deliberate trade-off for responsiveness and recoverable retries.
-
-**Failure semantics.** Validation and policy rejections are distinct from provider failures. Rate limits and overloads use bounded retries and `Retry-After` where available. If the outcome of a submission cannot be determined, its state remains `submission_unknown` rather than being treated as a confirmed failure.
-
-**State safety.** Webhooks are verified with HMAC-SHA256 over the timestamp and raw body, with a five-minute timestamp tolerance. A unique provider event ID makes receipt idempotent. The event is persisted before a quick 2xx response; queued processing uses transactions and row locks to prevent duplicate finalization or terminal-state regression. The same pricing and transition service handles polling recovery if webhook delivery fails. This requires a queue worker and scheduler, but avoids doing slow work inside webhook delivery.
-
-**Reconciliation.** `php artisan pixelforge:usage-reconcile --start=YYYY-MM-DD --end=YYYY-MM-DD` compares the provider's per-key UTC daily usage against local succeeded generations. It checks the four token categories, exact provider cost, and locally stored 25% markup. Mismatches make the command fail so reporting differences are not silently ignored.
-
-Eloquent is used directly for persistence. A generic repository abstraction is intentionally avoided because it would add indirection without improving these workflows.
-
-## Testing and quality checks
-
-Inside Docker Compose, use the isolated test settings in [local development and testing](docs/LOCAL-DEVELOPMENT.md#daily-workflow) for `php artisan test` and `composer ci:check`.
-
-The CI checks include PHP formatting, static analysis, frontend checks, and PHPUnit. Integration tests use Laravel's HTTP fakes to exercise the provider contract, idempotency, timeouts, overloads, acknowledgement races, raw webhook signatures, duplicate and out-of-order events, exact final charges, polling recovery, and persisted generation state. The CI suite runs on SQLite in memory and PostgreSQL 17; local Sail uses PostgreSQL.
-
-## API documentation
-
-[Pixelforge API reference](https://pixelforge.promptedit.dev/docs)
+- [Pixelforge API documentation](https://pixelforge.promptedit.dev/docs)
+- [Local development and testing](docs/LOCAL-DEVELOPMENT.md)
