@@ -176,7 +176,7 @@ final readonly class UsageReconciliationService
     }
 
     /**
-     * @param array<string, mixed> $row
+     * @param  array<string, mixed>  $row
      * @return array<string, int|string>
      */
     private function parseProviderRow(array $row): array
@@ -201,8 +201,8 @@ final readonly class UsageReconciliationService
     }
 
     /**
-     * @param array<string, int|string> $left
-     * @param array<string, int|string> $right
+     * @param  array<string, int|string>  $left
+     * @param  array<string, int|string>  $right
      */
     private function rowsMatch(array $left, array $right): bool
     {
@@ -216,8 +216,8 @@ final readonly class UsageReconciliationService
     }
 
     /**
-     * @param array<string, int|string> $left
-     * @param array<string, int|string> $right
+     * @param  array<string, int|string>  $left
+     * @param  array<string, int|string>  $right
      * @return array<string, int|string>
      */
     private function addRows(array $left, array $right): array

@@ -1,4 +1,5 @@
 <?php
+
 declare(strict_types=1);
 
 namespace App\Actions;
@@ -14,8 +15,8 @@ final readonly class PersistGeneration
     public function __construct(private PricingService $pricing) {}
 
     /**
-     * @param array{prompt:string,size:string,quality:string,reference_images:array<int,string>} $input
-     * @param array<string,mixed> $pricingSnapshot
+     * @param  array{prompt:string,size:string,quality:string,reference_images:array<int,string>}  $input
+     * @param  array<string,mixed>  $pricingSnapshot
      */
     public function execute(User $user, array $input, array $pricingSnapshot): Generation
     {

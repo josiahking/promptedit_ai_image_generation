@@ -19,7 +19,7 @@ final readonly class SubmitGeneration
     /**
      * Create one local request before dispatching any provider submission.
      *
-     * @param array{prompt:string,size:string,quality:string,reference_images:array<int,string>} $input
+     * @param  array{prompt:string,size:string,quality:string,reference_images:array<int,string>}  $input
      */
     public function execute(User $user, array $input): Generation
     {

@@ -40,6 +40,7 @@ final class SubmitPixelforgeGeneration implements ShouldQueue
         } catch (PixelforgeApiException $e) {
             if ($e->retryable && $this->attempts() < $this->tries) {
                 $this->release($e->retryAfterSeconds ?? $this->backoffSeconds());
+
                 return;
             }
 
@@ -51,6 +52,7 @@ final class SubmitPixelforgeGeneration implements ShouldQueue
             // and Idempotency-Key, never create a second local generation.
             if ($this->attempts() < $this->tries) {
                 $this->release($this->backoffSeconds());
+
                 return;
             }
 

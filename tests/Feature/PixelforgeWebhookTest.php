@@ -10,8 +10,10 @@ use App\Jobs\ProcessPixelforgeWebhook;
 use App\Models\Generation;
 use App\Models\User;
 use App\Models\WebhookEvent;
+use Illuminate\Database\Eloquent\ModelNotFoundException;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Queue;
+use Illuminate\Testing\TestResponse;
 use Tests\TestCase;
 use UnexpectedValueException;
 
@@ -81,7 +83,7 @@ final class PixelforgeWebhookTest extends TestCase
     }
 
     /** @param array<string,mixed> $event */
-    private function send(array $event, ?int $timestamp = null, bool $tamper = false): \Illuminate\Testing\TestResponse
+    private function send(array $event, ?int $timestamp = null, bool $tamper = false): TestResponse
     {
         $json = json_encode($event, JSON_THROW_ON_ERROR);
         $timestamp ??= time();
@@ -200,7 +202,7 @@ final class PixelforgeWebhookTest extends TestCase
         $event['data']['object']['metadata']['order_id'] = '00000000-0000-0000-0000-000000000000';
         $this->send($event)->assertNoContent();
 
-        $this->expectException(\Illuminate\Database\Eloquent\ModelNotFoundException::class);
+        $this->expectException(ModelNotFoundException::class);
         (new ProcessPixelforgeWebhook('evt_123'))->handle(app(ApplyPixelforgeGeneration::class));
     }
 

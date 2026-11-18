@@ -1,4 +1,5 @@
 <?php
+
 declare(strict_types=1);
 
 namespace Tests\Unit;
@@ -19,7 +20,7 @@ final class MoneyPricingTest extends TestCase
 
     public function test_exact_maximum_provider_and_customer_cost(): void
     {
-        $pricing = new PricingService();
+        $pricing = new PricingService;
         $usage = [
             'input_text_tokens' => 115,
             'input_image_tokens' => 1530,
@@ -46,12 +47,12 @@ final class MoneyPricingTest extends TestCase
     public function test_missing_token_count_is_rejected(): void
     {
         $this->expectException(InvalidArgumentException::class);
-        (new PricingService())->providerCost(['input_text_tokens' => 1], self::RATES);
+        (new PricingService)->providerCost(['input_text_tokens' => 1], self::RATES);
     }
 
     public function test_estimate_uses_provider_metadata_and_maximum(): void
     {
-        $pricing = new PricingService();
+        $pricing = new PricingService;
         $data = [
             'rates' => self::RATES,
             'tokens' => [

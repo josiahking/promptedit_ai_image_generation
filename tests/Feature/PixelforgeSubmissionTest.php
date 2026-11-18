@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Tests\Feature;
 
+use App\Actions\PersistGeneration;
 use App\Actions\RecordPixelforgeAcknowledgement;
 use App\Actions\SubmitGeneration;
 use App\Jobs\SubmitPixelforgeGeneration;
@@ -53,7 +54,7 @@ final class PixelforgeSubmissionTest extends TestCase
 
     private function makeGeneration(): Generation
     {
-        return app(\App\Actions\PersistGeneration::class)->execute(User::factory()->create(), [
+        return app(PersistGeneration::class)->execute(User::factory()->create(), [
             'prompt' => 'A calm sea',
             'size' => '1024x1024',
             'quality' => 'medium',

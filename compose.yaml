@@ -1,81 +1,85 @@
 # Local Docker Compose only. Not used by Railway production.
 # First build the one shared app image: docker compose build app
 x-php-service: &php-service
-  image: promptedit/php:local
-  working_dir: /var/www/html
-  env_file:
-    - .env
-  volumes:
-    - ./:/var/www/html
-    - node_modules:/var/www/html/node_modules
-  networks:
-    - promptedit
+    image: promptedit/php:local
+    working_dir: /var/www/html
+    env_file:
+        - .env
+    volumes:
+        - ./:/var/www/html
+        - node_modules:/var/www/html/node_modules
+    networks:
+        - promptedit
 
 services:
-  app:
-    <<: *php-service
-    build:
-      context: .
-      dockerfile: docker/php/Dockerfile
-    ports:
-      - "${APP_PORT:-8000}:8000"
-    depends_on:
-      db:
-        condition: service_healthy
-    command: php artisan serve --host=0.0.0.0 --port=8000
+    app:
+        <<: *php-service
+        build:
+            context: .
+            dockerfile: docker/php/Dockerfile
+        ports:
+            - '${APP_PORT:-8000}:8000'
+        depends_on:
+            db:
+                condition: service_healthy
+        command: php artisan serve --host=0.0.0.0 --port=8000
 
-  frontend:
-    <<: *php-service
-    command: npm run dev -- --host=0.0.0.0
-    ports:
-      - "${VITE_PORT:-5173}:5173"
-    depends_on:
-      app:
-        condition: service_started
-    restart: unless-stopped
+    frontend:
+        <<: *php-service
+        command: npm run dev -- --host=0.0.0.0
+        ports:
+            - '${VITE_PORT:-5173}:5173'
+        depends_on:
+            app:
+                condition: service_started
+        restart: unless-stopped
 
-  worker:
-    <<: *php-service
-    command: php artisan queue:work --sleep=1 --tries=3 --timeout=60
-    depends_on:
-      db:
-        condition: service_healthy
-      app:
-        condition: service_started
-    restart: unless-stopped
+    worker:
+        <<: *php-service
+        command: php artisan queue:work --sleep=1 --tries=3 --timeout=60
+        depends_on:
+            db:
+                condition: service_healthy
+            app:
+                condition: service_started
+        restart: unless-stopped
 
-  scheduler:
-    <<: *php-service
-    command: php artisan schedule:work
-    depends_on:
-      db:
-        condition: service_healthy
-      app:
-        condition: service_started
-    restart: unless-stopped
+    scheduler:
+        <<: *php-service
+        command: php artisan schedule:work
+        depends_on:
+            db:
+                condition: service_healthy
+            app:
+                condition: service_started
+        restart: unless-stopped
 
-  db:
-    image: postgres:17-alpine
-    environment:
-      POSTGRES_DB: "${DB_DATABASE:-promptedit}"
-      POSTGRES_USER: "${DB_USERNAME:-promptedit}"
-      POSTGRES_PASSWORD: "${DB_PASSWORD:-localpassword}"
-    ports:
-      - "${FORWARD_DB_PORT:-5432}:5432"
-    volumes:
-      - pgdata:/var/lib/postgresql/data
-    networks:
-      - promptedit
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U \"$$POSTGRES_USER\" -d \"$$POSTGRES_DB\""]
-      interval: 5s
-      timeout: 5s
-      retries: 15
+    db:
+        image: postgres:17-alpine
+        environment:
+            POSTGRES_DB: '${DB_DATABASE:-promptedit}'
+            POSTGRES_USER: '${DB_USERNAME:-promptedit}'
+            POSTGRES_PASSWORD: '${DB_PASSWORD:-localpassword}'
+        ports:
+            - '${FORWARD_DB_PORT:-5432}:5432'
+        volumes:
+            - pgdata:/var/lib/postgresql/data
+        networks:
+            - promptedit
+        healthcheck:
+            test:
+                [
+                    'CMD-SHELL',
+                    'pg_isready -U "$$POSTGRES_USER" -d "$$POSTGRES_DB"',
+                ]
+            interval: 5s
+            timeout: 5s
+            retries: 15
 
 networks:
-  promptedit:
-    driver: bridge
+    promptedit:
+        driver: bridge
 
 volumes:
-  pgdata:
-  node_modules:
+    pgdata:
+    node_modules:

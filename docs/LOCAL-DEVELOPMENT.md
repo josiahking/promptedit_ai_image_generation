@@ -65,8 +65,8 @@ After editing PHP or Vue files, bind mounts make changes available immediately. 
 
 ```bash
 docker compose exec -T app php artisan route:list
-docker compose exec -T app php artisan test
-docker compose exec -T app composer ci:check
+docker compose exec -T -e APP_ENV=testing -e DB_CONNECTION=sqlite -e DB_DATABASE=:memory: -e DB_URL= -e CACHE_STORE=array -e SESSION_DRIVER=array -e QUEUE_CONNECTION=sync app php artisan test
+docker compose exec -T -e APP_ENV=testing -e DB_CONNECTION=sqlite -e DB_DATABASE=:memory: -e DB_URL= -e CACHE_STORE=array -e SESSION_DRIVER=array -e QUEUE_CONNECTION=sync app composer ci:check
 docker compose exec -T app npm run build
 ```
 
@@ -81,10 +81,11 @@ docker compose exec -T db sh -c 'PGPASSWORD="$POSTGRES_PASSWORD" createdb -U "$P
 Then run the suite with explicit test database settings:
 
 ```bash
-docker compose exec -T -e DB_CONNECTION=pgsql -e DB_URL= -e DB_HOST=db -e DB_DATABASE=promptedit_test app php artisan test
+docker compose exec -T -e APP_ENV=testing -e DB_CONNECTION=pgsql -e DB_URL= -e DB_HOST=db -e DB_DATABASE=promptedit_test -e CACHE_STORE=array -e SESSION_DRIVER=array -e QUEUE_CONNECTION=sync app php artisan test
 ```
 
 Never run destructive tests against your normal development database or Railway production database.
+The explicit overrides are required because Compose passes the local `.env` values into the app container, and PHPUnit does not replace existing environment variables by default.
 
 ## Pixelforge local testing
 
